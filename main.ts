@@ -75,7 +75,7 @@ function parse(line: string) {
     } else if (parts[0] == "WAIT" && parts.length == 1) {
         basic.pause(parseFloat(parts[1]) * 1000)
     } else {
-        sendData("Error: Unknown or malformed command: '{line}'")
+        sendData("Error: Unknown or malformed command: " + line)
         control.reset()
     }
 
