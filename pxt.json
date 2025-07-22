@@ -10,7 +10,8 @@
         "main.blocks",
         "main.ts",
         "README.md",
-        "main.py"
+        "main.py",
+        "_locales/en-CA/README.md"
     ],
     "testFiles": [
         "test.ts"

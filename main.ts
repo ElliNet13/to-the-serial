@@ -1,23 +1,37 @@
+interface Compiled {
+    [key: string]: string[];
+}
+
+let connectedBT: boolean = false
+let compiled: Compiled = {}
+
+function sendData(data: string) {
+    serial.writeLine(data)
+    if (connectedBT) {
+        bluetooth.uartWriteString(data)
+    }
+}
+
 input.onLogoEvent(TouchButtonEvent.LongPressed, function on_logo_long_pressed() {
-    serial.writeLine("logolongpress")
+    sendData("logolongpress")
 })
 input.onButtonPressed(Button.A, function on_button_pressed_a() {
-    serial.writeLine("A")
+    sendData("A")
 })
 input.onButtonPressed(Button.AB, function on_button_pressed_ab() {
-    serial.writeLine("A+B")
+    sendData("A+B")
 })
 input.onButtonPressed(Button.B, function on_button_pressed_b() {
-    serial.writeLine("B")
+    sendData("B")
 })
 input.onLogoEvent(TouchButtonEvent.Touched, function on_logo_touched() {
-    serial.writeLine("logotouch")
+    sendData("logotouch")
 })
 input.onLogoEvent(TouchButtonEvent.Pressed, function on_logo_pressed() {
-    serial.writeLine("logopress")
+    sendData("logopress")
 })
 input.onLogoEvent(TouchButtonEvent.Released, function on_logo_released() {
-    serial.writeLine("logorelease")
+    sendData("logorelease")
 })
 
 function parse(line: string) {
@@ -32,20 +46,36 @@ function parse(line: string) {
                 led.plot(x, y)
             } else {
                 //  no debug message on success
-                serial.writeLine("Error: Coordinates out of range ({x},{y})")
+                sendData("Error: Coordinates out of range ({x},{y})")
                 control.reset()
             }
 
         }
         catch (_) {
-            serial.writeLine("Error: Invalid number format in PLOT command")
+            sendData("Error: Invalid number format in PLOT command")
             control.reset()
         }
 
     } else if (parts[0] == "CLEAR" && parts.length == 1) {
         basic.clearScreen()
+    } else if (parts[0] == "SENDCOMPILE" && parts.length == 2) {
+        let newcompile = []
+        let current = ""
+        do {
+            serial.readUntil(serial.delimiters(Delimiters.CarriageReturn))
+            if (current != "ENDCOMPILE") {
+                newcompile.push(current)
+            }
+        } while (current != "ENDCOMPILE")
+        compiled[parts[1]] = newcompile
+    } else if (parts[0] == "PLAYCOMPILE" && parts.length == 2 && compiled[parts[1]]) {
+        for (const cmd of compiled[parts[1]]) {
+        parse(cmd)
+        }
+    } else if (parts[0] == "WAIT" && parts.length == 1) {
+        basic.pause(parseFloat(parts[1]) * 1000)
     } else {
-        serial.writeLine("Error: Unknown or malformed command: '{line}'")
+        sendData("Error: Unknown or malformed command: '{line}'")
         control.reset()
     }
 
@@ -80,10 +110,13 @@ bluetooth.onUartDataReceived(serial.delimiters(Delimiters.CarriageReturn), funct
 })
 
 bluetooth.onBluetoothDisconnected(function() {
+    connectedBT = false
     basic.showIcon(IconNames.No)
 })
 bluetooth.onBluetoothConnected(function() {
+    connectedBT = true
     basic.showIcon(IconNames.Yes)
+    bluetooth.uartWriteString("READY\r\n")
     basic.pause(1000)
     basic.clearScreen()
 })
