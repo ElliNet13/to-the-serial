@@ -19,10 +19,10 @@ input.onLogoEvent(TouchButtonEvent.Pressed, function on_logo_pressed() {
 input.onLogoEvent(TouchButtonEvent.Released, function on_logo_released() {
     serial.writeLine("logorelease")
 })
-serial.onDataReceived(serial.delimiters(Delimiters.NewLine), function on_data_received() {
+
+function parse(line: string) {
     let x: number;
     let y: number;
-    let line = _py.py_string_strip(serial.readUntil(serial.delimiters(Delimiters.CarriageReturn)))
     let parts = _py.py_string_split(line, " ")
     if (parts[0] == "PLOT" && parts.length == 3) {
         try {
@@ -35,21 +35,27 @@ serial.onDataReceived(serial.delimiters(Delimiters.NewLine), function on_data_re
                 serial.writeLine("Error: Coordinates out of range ({x},{y})")
                 control.reset()
             }
-            
+
         }
         catch (_) {
             serial.writeLine("Error: Invalid number format in PLOT command")
             control.reset()
         }
-        
+
     } else if (parts[0] == "CLEAR" && parts.length == 1) {
         basic.clearScreen()
     } else {
         serial.writeLine("Error: Unknown or malformed command: '{line}'")
         control.reset()
     }
-    
+
+}
+
+serial.onDataReceived(serial.delimiters(Delimiters.CarriageReturn), function() {
+    let line: string = _py.py_string_strip(serial.readUntil(serial.delimiters(Delimiters.CarriageReturn)))
+    parse(line)
 })
+
 basic.clearScreen()
 basic.forever(function on_forever() {
     basic.pause(1000)
@@ -65,3 +71,19 @@ function extract_text(line: string): string {
     
 }
 
+bluetooth.startUartService()
+bluetooth.startTemperatureService()
+bluetooth.startLEDService()
+
+bluetooth.onUartDataReceived(serial.delimiters(Delimiters.CarriageReturn), function() {
+    parse(bluetooth.uartReadUntil(serial.delimiters(Delimiters.CarriageReturn)))
+})
+
+bluetooth.onBluetoothDisconnected(function() {
+    basic.showIcon(IconNames.No)
+})
+bluetooth.onBluetoothConnected(function() {
+    basic.showIcon(IconNames.Yes)
+    basic.pause(1000)
+    basic.clearScreen()
+})
