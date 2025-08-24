@@ -38,7 +38,7 @@ function parse(line: string) {
     let x: number;
     let y: number;
     let parts = _py.py_string_split(line, " ")
-    if (parts[0] == "PLOT" && parts.length == 3) {
+    if (parts[0] == "P" && parts.length == 3) {
         try {
             x = parseInt(parts[1])
             y = parseInt(parts[2])
