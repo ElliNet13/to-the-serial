@@ -52,27 +52,27 @@ function parse(line: string) {
 
         }
         catch (_) {
-            sendData("Error: Invalid number format in PLOT command")
+            sendData("Error: Invalid number format in PLOT (P) command")
             control.reset()
         }
 
-    } else if (parts[0] == "CLEAR" && parts.length == 1) {
+    } else if (parts[0] == "C" && parts.length == 1) { // CLEAR
         basic.clearScreen()
-    } else if (parts[0] == "SENDCOMPILE" && parts.length == 2) {
+    } else if (parts[0] == "SC" && parts.length == 2) { // SENDCOMPILE
         let newcompile = []
         let current = ""
         do {
             serial.readUntil(serial.delimiters(Delimiters.CarriageReturn))
-            if (current != "ENDCOMPILE") {
+            if (current != "EC") { // ENDCOMPILE
                 newcompile.push(current)
             }
-        } while (current != "ENDCOMPILE")
+        } while (current != "EC") // ENDCOMPILE
         compiled[parts[1]] = newcompile
-    } else if (parts[0] == "PLAYCOMPILE" && parts.length == 2 && compiled[parts[1]]) {
+    } else if (parts[0] == "PC" && parts.length == 2 && compiled[parts[1]]) { // PLAYCOMPILE
         for (const cmd of compiled[parts[1]]) {
         parse(cmd)
         }
-    } else if (parts[0] == "WAIT" && parts.length == 1) {
+    } else if (parts[0] == "W" && parts.length == 1) { // WAIT
         basic.pause(parseFloat(parts[1]) * 1000)
     } else {
         sendData("Error: Unknown or malformed command: " + line)
