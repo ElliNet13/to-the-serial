@@ -35,50 +35,55 @@ input.onLogoEvent(TouchButtonEvent.Released, function on_logo_released() {
 })
 
 function parse(line: string) {
-    let x: number;
-    let y: number;
-    let parts = _py.py_string_split(line, " ")
-    if (parts[0] == "P" && parts.length == 3) {
-        try {
-            x = parseInt(parts[1])
-            y = parseInt(parts[2])
-            if (0 <= x && x <= 4 && (0 <= y && y <= 4)) {
-                led.plot(x, y)
-            } else {
-                //  no debug message on success
-                sendData("Error: Coordinates out of range ({x},{y})")
-                control.reset()
-            }
+    let parts = _py.py_string_split(line, " ");
 
-        }
-        catch (_) {
-            sendData("Error: Invalid number format in PLOT (P) command")
-            control.reset()
+    if (parts[0] == "P" && parts.length >= 3) { // PLOT
+        try {
+            for (let i = 1; i < parts.length; i += 2) {
+                let x = parseInt(parts[i]);
+                let y = parseInt(parts[i + 1]);
+                if (x === undefined || y === undefined) {
+                    sendData("Error: Missing coordinate in PLOT command");
+                    control.reset();
+                }
+                if (0 <= x && x <= 4 && 0 <= y && y <= 4) {
+                    led.plot(x, y);
+                } else {
+                    sendData(`Error: Coordinates out of range (${x},${y})`);
+                    control.reset();
+                }
+            }
+        } catch (_) {
+            sendData("Error: Invalid number format in PLOT command");
+            control.reset();
         }
 
     } else if (parts[0] == "C" && parts.length == 1) { // CLEAR
-        basic.clearScreen()
+        basic.clearScreen();
+
     } else if (parts[0] == "SC" && parts.length == 2) { // SENDCOMPILE
-        let newcompile = []
-        let current = ""
+        let newcompile = [];
+        let current = "";
         do {
             serial.readUntil(serial.delimiters(Delimiters.CarriageReturn))
             if (current != "EC") { // ENDCOMPILE
-                newcompile.push(current)
+                newcompile.push(current);
             }
         } while (current != "EC") // ENDCOMPILE
-        compiled[parts[1]] = newcompile
+        compiled[parts[1]] = newcompile;
+
     } else if (parts[0] == "PC" && parts.length == 2 && compiled[parts[1]]) { // PLAYCOMPILE
         for (const cmd of compiled[parts[1]]) {
-        parse(cmd)
+            parse(cmd);
         }
-    } else if (parts[0] == "W" && parts.length == 1) { // WAIT
-        basic.pause(parseFloat(parts[1]) * 1000)
-    } else {
-        sendData("Error: Unknown or malformed command: " + line)
-        control.reset()
-    }
 
+    } else if (parts[0] == "W" && parts.length == 2) { // WAIT
+        basic.pause(parseFloat(parts[1]) * 1000);
+
+    } else {
+        sendData("Error: Unknown or malformed command: " + line);
+        control.reset();
+    }
 }
 
 serial.onDataReceived(serial.delimiters(Delimiters.CarriageReturn), function() {
