@@ -2,9 +2,10 @@ interface Compiled {
     [key: string]: string[];
 }
 
-let connectedBT: boolean = false;
+let connectedBT = false;
 let compiled: Compiled = {};
 
+// Send data to serial and Bluetooth if connected
 function sendData(data: string) {
     serial.writeLine(data);
     if (connectedBT) {
@@ -12,58 +13,69 @@ function sendData(data: string) {
     }
 }
 
+// Clamp function for coordinates
+function clampCoord(v: number, minVal: number, maxVal: number): number {
+    if (v < minVal) return minVal;
+    if (v > maxVal) return maxVal;
+    return v;
+}
+
+// Clean line: remove non-printable characters
+function cleanLine(line: string): string {
+    let result = "";
+    for (let i = 0; i < line.length; i++) {
+        const c = line.charCodeAt(i);
+        if (c >= 32 && c <= 126) result += line[i];
+    }
+    return _py.py_string_strip(result);
+}
+
+// Parse commands
 function parse(line: string, depth: number = 0) {
     if (depth > 10) {
         sendData("Error: Maximum recursion depth reached");
         return;
     }
 
-    line = _py.py_string_strip(line);
+    line = cleanLine(line);
     if (line.length === 0) return;
 
-    let parts = _py.py_string_split(line, " ");
+    const parts = _py.py_string_split(line, " ");
+    const cmd = parts[0];
 
-    if (parts[0] === "P" && parts.length >= 3) { // PLOT
-        try {
-            for (let i = 1; i < parts.length; i += 2) {
-                let x = parseInt(parts[i]);
-                let y = parseInt(parts[i + 1]);
-                if (isNaN(x) || isNaN(y)) {
-                    sendData("Error: Invalid number format in PLOT command");
-                    return;
-                }
-                if (0 <= x && x <= 4 && 0 <= y && y <= 4) {
-                    led.plot(x, y);
-                } else {
-                    sendData(`Error: Coordinates out of range (${x},${y})`);
-                    return;
-                }
-            }
-        } catch (_) {
-            sendData("Error: Invalid PLOT command");
+    if (cmd === "P" && parts.length >= 3) { // PLOT
+        for (let i = 1; i < parts.length; i += 2) {
+            let x = parseInt(parts[i] || "0");
+            let y = parseInt(parts[i + 1] || "0");
+            if (isNaN(x)) x = 0;
+            if (isNaN(y)) y = 0;
+            x = clampCoord(x, 0, 4);
+            y = clampCoord(y, 0, 4);
+            led.plot(x, y);
         }
 
-    } else if (parts[0] === "C" && parts.length === 1) { // CLEAR
+    } else if (cmd === "C" && parts.length === 1) { // CLEAR
         basic.clearScreen();
 
-    } else if (parts[0] === "SC" && parts.length === 2) { // SENDCOMPILE
+    } else if (cmd === "SC" && parts.length === 2) { // SENDCOMPILE
+        const key = parts[1];
         let newcompile: string[] = [];
         let current = "";
         do {
             current = serial.readUntil(serial.delimiters(Delimiters.CarriageReturn));
-            current = _py.py_string_strip(current);
-            if (current !== "EC") { // ENDCOMPILE
+            current = cleanLine(current);
+            if (current !== "EC") {
                 newcompile.push(current);
             }
         } while (current !== "EC");
-        compiled[parts[1]] = newcompile;
+        compiled[key] = newcompile;
 
-    } else if (parts[0] === "PC" && parts.length === 2 && compiled[parts[1]]) { // PLAYCOMPILE
-        for (const cmd of compiled[parts[1]]) {
-            parse(cmd, depth + 1); // pass depth for recursion safety
+    } else if (cmd === "PC" && parts.length === 2 && compiled[parts[1]]) { // PLAYCOMPILE
+        for (const cmdLine of compiled[parts[1]]) {
+            parse(cmdLine, depth + 1);
         }
 
-    } else if (parts[0] === "W" && parts.length === 2) { // WAIT
+    } else if (cmd === "W" && parts.length === 2) { // WAIT
         let t = parseFloat(parts[1]);
         if (!isNaN(t) && t >= 0) {
             basic.pause(t * 1000);
@@ -71,13 +83,24 @@ function parse(line: string, depth: number = 0) {
             sendData("Error: Invalid WAIT time");
         }
 
+    } else if (cmd === "TEXT") { // TEXT command
+        let text = line.slice(5).toUpperCase();
+        for (let i = 0; i < text.length; i++) {
+            let char = text[i];
+            if (char >= "A" && char <= "Z") {
+                // Example: map A-Z to simple patterns on 5x5 grid
+                led.plot(i % 5, i % 5);
+            }
+        }
+
     } else {
         sendData("Error: Unknown or malformed command: " + line);
     }
 }
 
-serial.onDataReceived(serial.delimiters(Delimiters.CarriageReturn), function () {
-    let line = _py.py_string_strip(serial.readUntil(serial.delimiters(Delimiters.CarriageReturn)));
+// Serial input
+serial.onDataReceived(serial.delimiters(Delimiters.CarriageReturn), () => {
+    const line = cleanLine(serial.readUntil(serial.delimiters(Delimiters.CarriageReturn)));
     parse(line);
 });
 
@@ -90,7 +113,7 @@ input.onLogoEvent(TouchButtonEvent.Touched, () => sendData("logotouch"));
 input.onLogoEvent(TouchButtonEvent.Pressed, () => sendData("logopress"));
 input.onLogoEvent(TouchButtonEvent.Released, () => sendData("logorelease"));
 
-// Regularly send temperature over serial
+// Send temperature every second
 basic.clearScreen();
 basic.forever(() => {
     basic.pause(1000);
@@ -103,7 +126,7 @@ bluetooth.startTemperatureService();
 bluetooth.startLEDService();
 
 bluetooth.onUartDataReceived(serial.delimiters(Delimiters.CarriageReturn), () => {
-    let line = _py.py_string_strip(bluetooth.uartReadUntil(serial.delimiters(Delimiters.CarriageReturn)));
+    const line = cleanLine(bluetooth.uartReadUntil(serial.delimiters(Delimiters.CarriageReturn)));
     parse(line);
 });
 
